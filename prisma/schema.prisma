@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  role         String   @default("admin")
+  passwordHash String
+  salt         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lessons                  Lesson[]            @relation("LessonAuthor")
+  createdVocabularyEntries VocabularyEntry[]   @relation("VocabularyCreator")
+  learnerVocabulary        LearnerVocabulary[]
+}
+
+model Lesson {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  status      LessonStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  authorId    String
+  author      User         @relation("LessonAuthor", fields: [authorId], references: [id])
+  tasks       Task[]
+}
+
+model Task {
+  id        String       @id @default(cuid())
+  lessonId  String
+  lesson    Lesson       @relation(fields: [lessonId], references: [id])
+  prompt    String
+  type      TaskType
+  order     Int
+  config    Json
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  options   TaskOption[]
+}
+
+model TaskOption {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id])
+  label     String
+  isCorrect Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum LessonStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum TaskType {
+  PICK_ONE
+  FILL_IN_BLANK
+  MATCH
+}
+
+model VocabularyEntry {
+  id           String                  @id @default(cuid())
+  englishText  String
+  kind         VocabularyKind          @default(WORD)
+  notes        String?
+  tags         String[]
+  createdById  String?
+  createdBy    User?                   @relation("VocabularyCreator", fields: [createdById], references: [id])
+  translations VocabularyTranslation[]
+  learnerWords LearnerVocabulary[]
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+}
+
+model VocabularyTranslation {
+  id           String          @id @default(cuid())
+  entryId      String
+  languageCode String
+  translation  String
+  usageExample String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  entry        VocabularyEntry @relation(fields: [entryId], references: [id])
+}
+
+model LearnerVocabulary {
+  id        String            @id @default(cuid())
+  userId    String
+  entryId   String
+  status    LearnerWordStatus @default(NEW)
+  addedAt   DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  user      User              @relation(fields: [userId], references: [id])
+  entry     VocabularyEntry   @relation(fields: [entryId], references: [id])
+
+  @@unique([userId, entryId])
+}
+
+enum VocabularyKind {
+  WORD
+  PHRASE
+  SENTENCE
+}
+
+enum LearnerWordStatus {
+  NEW
+  REVIEWING
+  MASTERED
+}

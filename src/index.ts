@@ -1,0 +1,35 @@
+import cors from 'cors';
+import express from 'express';
+import swaggerUi from 'swagger-ui-express';
+import { config } from './config';
+import { swaggerSpec } from './docs/swagger';
+import { authRouter } from './routes/auth';
+import { lessonsRouter } from './routes/lessons';
+import { analyticsRouter } from './routes/analytics';
+import { vocabularyRouter } from './routes/vocabulary';
+import { learnerVocabularyRouter } from './routes/learnerVocabulary';
+
+const app = express();
+
+app.use(express.json());
+app.use(
+  cors({
+    origin: config.allowedOrigins,
+    credentials: true,
+  }),
+);
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api', authRouter);
+app.use('/api', lessonsRouter);
+app.use('/api', analyticsRouter);
+app.use('/api', vocabularyRouter);
+app.use('/api', learnerVocabularyRouter);
+
+app.listen(config.port, () => {
+  console.log(`Backend listening on http://localhost:${config.port}`);
+});
