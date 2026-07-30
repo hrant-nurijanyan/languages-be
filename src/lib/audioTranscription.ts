@@ -3,7 +3,10 @@ import path from 'path';
 
 import { TranscriptWord } from './lessonTimingAlignment';
 
-export type TimingTranscriptionProvider = 'openai-whisper' | 'dashscope-qwen-filetrans';
+export type TimingTranscriptionProvider =
+  | 'openai-whisper'
+  | 'dashscope-qwen-asr-flash'
+  | 'dashscope-qwen-filetrans';
 
 export interface AudioTranscriptionResult {
   text: string;
@@ -68,6 +71,23 @@ interface DashScopeResultPayload {
   }>;
 }
 
+interface DashScopeQwenAsrResponse {
+  output?: {
+    choices?: Array<{
+      message?: {
+        content?: Array<{
+          text?: string;
+        }>;
+      };
+    }>;
+  };
+  usage?: {
+    seconds?: number;
+  };
+  code?: string;
+  message?: string;
+}
+
 const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.mpeg': 'audio/mpeg',
@@ -79,6 +99,7 @@ const MIME_TYPES_BY_EXTENSION: Record<string, string> = {
 };
 
 const DEFAULT_DASHSCOPE_REGION = 'ap-southeast-1';
+const QWEN_ASR_FLASH_MODEL = 'qwen3-asr-flash-2025-09-08';
 const DASHSCOPE_POLL_ATTEMPTS = 20;
 const DASHSCOPE_POLL_DELAY_MS = 1500;
 
@@ -123,6 +144,14 @@ export async function transcribeAudioWithWordTimestamps({
 }): Promise<AudioTranscriptionResult> {
   const selectedProvider = provider ?? getTimingTranscriptionProvider();
 
+  if (selectedProvider === 'dashscope-qwen-asr-flash') {
+    if (!audioUrl) {
+      throw new Error('Qwen ASR requires the lesson item audioUrl so the provider can fetch a public file URL.');
+    }
+
+    return transcribeWithDashScopeQwenAsrFlash({ audioUrl });
+  }
+
   if (selectedProvider === 'dashscope-qwen-filetrans') {
     if (!audioUrl) {
       throw new Error('DashScope file transcription requires the lesson item audioUrl so the provider can fetch a public file URL.');
@@ -134,6 +163,71 @@ export async function transcribeAudioWithWordTimestamps({
   }
 
   return transcribeWithOpenAiWhisper({ audioPath, prompt });
+}
+
+async function transcribeWithDashScopeQwenAsrFlash({
+  audioUrl,
+}: {
+  audioUrl: string;
+}): Promise<AudioTranscriptionResult> {
+  const apiKey = process.env.DASHSCOPE_API_KEY;
+  const workspaceId = process.env.DASHSCOPE_WORKSPACE_ID;
+  const region = process.env.DASHSCOPE_REGION?.trim() || DEFAULT_DASHSCOPE_REGION;
+
+  if (!apiKey) {
+    throw new Error('DASHSCOPE_API_KEY is not configured');
+  }
+  if (!workspaceId) {
+    throw new Error('DASHSCOPE_WORKSPACE_ID is not configured');
+  }
+
+  const fileUrl = buildDashScopeFileUrl(audioUrl);
+  const baseUrl = `https://${workspaceId}.${region}.maas.aliyuncs.com/api/v1`;
+  const response = await fetch(`${baseUrl}/services/aigc/multimodal-generation/generation`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: QWEN_ASR_FLASH_MODEL,
+      input: {
+        messages: [
+          {
+            role: 'user',
+            content: [{ audio: fileUrl }],
+          },
+        ],
+      },
+      parameters: {
+        asr_options: {
+          language: 'en',
+          enable_itn: false,
+        },
+      },
+    }),
+  });
+  const payload = (await response.json()) as DashScopeQwenAsrResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.message ?? payload.code ?? `Qwen ASR transcription failed with ${response.status}`);
+  }
+
+  const text = (payload.output?.choices?.[0]?.message?.content ?? [])
+    .map((content) => content.text?.trim() ?? '')
+    .filter(Boolean)
+    .join(' ');
+
+  return {
+    provider: 'dashscope-qwen-asr-flash',
+    text,
+    audioDurationSeconds:
+      typeof payload.usage?.seconds === 'number' && Number.isFinite(payload.usage.seconds)
+        ? payload.usage.seconds
+        : undefined,
+    words: [],
+    warnings: ['Qwen ASR returned transcript text without word timestamps; timings were estimated from the transcript.'],
+  };
 }
 
 async function transcribeWithOpenAiWhisper({
