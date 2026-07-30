@@ -44,6 +44,60 @@ describe('audio transcription provider selection', () => {
     );
   });
 
+  it('transcribes uploaded audio through the free Qwen ASR model', async () => {
+    process.env.DASHSCOPE_API_KEY = 'dashscope-test-key';
+    process.env.DASHSCOPE_WORKSPACE_ID = 'workspace-123';
+    process.env.DASHSCOPE_REGION = 'ap-southeast-1';
+    process.env.APP_BASE_URL = 'https://api.example.com';
+
+    const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
+    global.fetch = (async (url, init) => {
+      fetchCalls.push({ url: String(url), init });
+      return {
+        ok: true,
+        json: async () => ({
+          output: {
+            choices: [
+              {
+                message: {
+                  content: [{ text: 'Hello world.' }],
+                },
+              },
+            ],
+          },
+          usage: { seconds: 3 },
+        }),
+      } as Response;
+    }) as typeof fetch;
+
+    const result = await transcribeAudioWithWordTimestamps({
+      audioPath: '/tmp/ignored.mp3',
+      audioUrl: '/media/audio/test.mp3',
+      provider: 'dashscope-qwen-asr-flash',
+    });
+
+    assert.equal(result.provider, 'dashscope-qwen-asr-flash');
+    assert.equal(result.text, 'Hello world.');
+    assert.equal(result.audioDurationSeconds, 3);
+    assert.deepEqual(result.words, []);
+    assert.match(result.warnings?.[0] ?? '', /without word timestamps/i);
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(
+      fetchCalls[0].url,
+      'https://workspace-123.ap-southeast-1.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+    );
+
+    const requestBody = JSON.parse(String(fetchCalls[0].init?.body)) as {
+      model: string;
+      input: { messages: Array<{ content: Array<{ audio?: string }> }> };
+      parameters: { asr_options: { language: string; enable_itn: boolean } };
+    };
+    assert.equal(requestBody.model, 'qwen3-asr-flash-2025-09-08');
+    assert.equal(requestBody.input.messages[0].content[0].audio, 'https://api.example.com/media/audio/test.mp3');
+    assert.equal(requestBody.parameters.asr_options.language, 'en');
+    assert.equal(requestBody.parameters.asr_options.enable_itn, false);
+  });
+
   it('transcribes uploaded audio through dashscope file transcription and normalizes word timestamps', async () => {
     process.env.TIMING_TRANSCRIPTION_PROVIDER = 'dashscope-qwen-filetrans';
     process.env.DASHSCOPE_API_KEY = 'dashscope-test-key';
