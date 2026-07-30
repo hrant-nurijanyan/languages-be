@@ -134,25 +134,6 @@ test('repairs collapsed provider timestamps using the audio duration', () => {
   );
 });
 
-test('estimates a transcript timeline when the provider returns text and duration only', () => {
-  const timings = generateLessonTimingsFromTranscript({
-    lessonText: 'Hello world. Hello again!',
-    transcriptText: 'Hello world. Hello again!',
-    transcriptWords: [],
-    audioDurationSeconds: 4,
-  });
-
-  assert.equal(timings.wordTimings.length, 4);
-  assert.equal(timings.wordTimings[0].startMs, 0);
-  assert.equal(timings.wordTimings.at(-1)?.endMs, 4000);
-  assert.equal(timings.sentenceTimings.length, 2);
-  assert.ok(
-    timings.warnings.includes(
-      'AI returned transcript text without word timestamps, so word ranges were estimated across the audio duration.',
-    ),
-  );
-});
-
 test('estimates unmatched lesson words from neighboring transcript timings', () => {
   const timings = generateLessonTimingsFromTranscript({
     lessonText: 'The quick brown fox.',

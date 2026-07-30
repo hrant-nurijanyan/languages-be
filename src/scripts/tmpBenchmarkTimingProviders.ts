@@ -48,7 +48,7 @@ async function main() {
 
   const providers: TimingTranscriptionProvider[] = [
     'openai-whisper',
-    'dashscope-qwen-asr-flash',
+    'dashscope-qwen-filetrans',
   ];
 
   const results: ProviderBenchmarkResult[] = [];

@@ -88,30 +88,6 @@ export function generateLessonTimingsFromTranscript({
     }))
     .filter((word) => word.normalizedText.length > 0 && word.end > word.start);
 
-  if (
-    !transcriptWordsWithText.length &&
-    audioDurationSeconds !== undefined &&
-    Number.isFinite(audioDurationSeconds) &&
-    audioDurationSeconds > 0
-  ) {
-    const transcriptWordsFromText = extractTextWords(transcriptText).map((word) => ({
-      word: word.text,
-      normalizedText: word.normalizedText,
-      start: 0,
-      end: 0,
-    }));
-
-    if (transcriptWordsFromText.length) {
-      transcriptWordsWithText = estimateTranscriptTimeline(
-        transcriptWordsFromText,
-        audioDurationSeconds,
-      );
-      warnings.push(
-        'AI returned transcript text without word timestamps, so word ranges were estimated across the audio duration.',
-      );
-    }
-  }
-
   if (hasCollapsedTranscriptTimeline(transcriptWordsWithText)) {
     if (
       audioDurationSeconds !== undefined &&

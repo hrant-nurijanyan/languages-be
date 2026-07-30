@@ -137,7 +137,7 @@ const createItemSchema = itemBaseObjectSchema.omit({ id: true }).superRefine(ref
 
 const generateTimingsSchema = z.object({
   text: z.string().min(1).optional(),
-  provider: z.enum(['openai-whisper', 'dashscope-qwen-asr-flash']).default('openai-whisper'),
+  provider: z.enum(['openai-whisper', 'dashscope-qwen-filetrans']).default('openai-whisper'),
 });
 
 type TimingBenchmarkSummary = {
@@ -693,7 +693,7 @@ router.post(
     }
 
     const lessonText = parsed.data.text ?? item.text;
-    const providers = ['openai-whisper', 'dashscope-qwen-asr-flash'] as const;
+    const providers = ['openai-whisper', 'dashscope-qwen-filetrans'] as const;
 
     const results = await Promise.all(
       providers.map(async (provider) => {
